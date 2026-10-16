@@ -729,13 +729,13 @@ test('Realtime service configuration selects compatible endpoint/model without f
   assert.doesNotMatch(response.body, /server-fixture|voice\.example/);
 });
 
-test('OpenAI routes answer generically when the upstream or the request fails', async (t) => {
-  env(t, 'OPENAI_API_KEY', 'fixture-upstream-secret');
+test('AI routes answer generically when the upstream or the request fails', async (t) => {
+  env(t, 'GROQ_API_KEY', 'fixture-upstream-secret');
   env(t, 'GEV_RATELIMIT_OPENAI_PER_MIN', undefined);
   const leak =
     'fixture-upstream-secret req_fixture_1234 org-fixture quota exhausted';
 
-  // `data.error.message` is OpenAI's own wording — request ids, organization
+  // `data.error.message` is Groq's own wording — request ids, organization
   // hints, quota phrasing — and was relayed verbatim whenever upstream was not ok.
   t.mock.method(globalThis, 'fetch', async () =>
     Response.json({ error: { message: leak } }, { status: 429 }),
@@ -744,7 +744,7 @@ test('OpenAI routes answer generically when the upstream or the request fails', 
     install(openAiRealtimeProxy()).get('/api/openai/hud-summary'),
     { method: 'POST', body: JSON.stringify({ context: {} }) },
   );
-  assert.equal(summary.json().error, 'OpenAI HUD summary request failed');
+  assert.equal(summary.json().error, 'Groq HUD summary request failed');
   assert.equal(summary.body.includes('req_fixture_1234'), false);
   assert.equal(summary.body.includes('fixture-upstream-secret'), false);
 

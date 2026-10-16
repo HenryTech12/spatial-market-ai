@@ -169,11 +169,13 @@ test('the realtime token route throttles by default, and says so in a 429', asyn
 });
 
 test('the HUD summary route throttles the paid path, never the free one', async (t) => {
-  env(t, 'OPENAI_API_KEY', 'fixture-upstream-secret');
+  env(t, 'GROQ_API_KEY', 'fixture-upstream-secret');
   let upstreamCalls = 0;
   t.mock.method(globalThis, 'fetch', async () => {
     upstreamCalls += 1;
-    return Response.json({ output_text: 'five word hud summary here' });
+    return Response.json({
+      choices: [{ message: { content: 'five word hud summary here' } }],
+    });
   });
 
   // Its own client address: the limiter is cached at module scope and shared
@@ -208,7 +210,7 @@ test('the HUD summary route throttles the paid path, never the free one', async 
   // The keyless HUD answer is deliberately NOT throttled: it is composed
   // locally, spends nothing upstream, and capping it would only take the free
   // HUD away from an unconfigured install. Same exhausted client, no key.
-  delete process.env.OPENAI_API_KEY;
+  delete process.env.GROQ_API_KEY;
   const free = await request(handleHudSummary, { remoteAddress: from });
   assert.equal(free.status, 200, 'the free path answers past a spent budget');
   assert.equal(JSON.parse(free.body).configured, false);

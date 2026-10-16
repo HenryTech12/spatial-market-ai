@@ -4,18 +4,10 @@ import {
 } from '../../../src/hudSummaryResponse.js';
 import { enforceRateLimit, openAiRateLimiter } from './rate-limit.js';
 import { readRequestBody } from '../common/request.js';
-import { OPENAI_HUD_SUMMARY_MODEL_DEFAULT } from './constants.js';
+import { GROQ_HUD_SUMMARY_MODEL_DEFAULT } from './constants.js';
 
-function extractOpenAiResponseText(data) {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
-  if (!Array.isArray(data?.output)) return '';
-  return data.output
-    .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
-    .map((part) => part?.text || part?.output_text || '')
-    .join(' ')
-    .trim();
+function extractGroqResponseText(data) {
+  return data?.choices?.[0]?.message?.content?.trim?.() || '';
 }
 
 function toFiveWordHudSummary(value) {
@@ -36,7 +28,7 @@ async function handleHudSummary(req, res) {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
   const keyless = keylessHudSummaryResponse(apiKey);
   if (keyless) {
     res.statusCode = keyless.statusCode;
@@ -54,7 +46,7 @@ async function handleHudSummary(req, res) {
   try {
     const body = await readRequestBody(req, 64 * 1024);
     const context = JSON.parse(body || '{}');
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -62,16 +54,16 @@ async function handleHudSummary(req, res) {
       },
       body: JSON.stringify({
         model:
-          process.env.OPENAI_HUD_SUMMARY_MODEL ||
-          OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
-        instructions: HUD_SUMMARY_INSTRUCTIONS,
-        input: JSON.stringify(context),
-        reasoning: { effort: 'minimal' },
-        max_output_tokens: 100,
+          process.env.GROQ_HUD_SUMMARY_MODEL || GROQ_HUD_SUMMARY_MODEL_DEFAULT,
+        messages: [
+          { role: 'system', content: HUD_SUMMARY_INSTRUCTIONS },
+          { role: 'user', content: JSON.stringify(context) },
+        ],
+        max_tokens: 100,
       }),
     });
     const data = await response.json().catch(() => ({}));
-    const summary = toFiveWordHudSummary(extractOpenAiResponseText(data));
+    const summary = toFiveWordHudSummary(extractGroqResponseText(data));
     res.statusCode = response.ok && summary ? 200 : response.status || 502;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
@@ -80,9 +72,9 @@ async function handleHudSummary(req, res) {
     res.end(
       JSON.stringify({
         summary: summary || null,
-        // Never relay `data.error.message`: that is OpenAI's own wording, and
+        // Never relay `data.error.message`: that is Groq's own wording, and
         // it carries request ids, organization hints and quota phrasing.
-        error: response.ok ? null : 'OpenAI HUD summary request failed',
+        error: response.ok ? null : 'Groq HUD summary request failed',
       }),
     );
   } catch {
@@ -91,7 +83,7 @@ async function handleHudSummary(req, res) {
     res.setHeader('Content-Type', 'application/json');
     res.end(
       JSON.stringify({
-        error: 'OpenAI HUD summary request failed',
+        error: 'Groq HUD summary request failed',
       }),
     );
   }
